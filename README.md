@@ -8,11 +8,18 @@ This project provides a minimal WebAssembly module compiled from C, implementing
 
 ## Features
 
-- Detects collisions between an axis-aligned rectangle (AABB) and a rotated rectangle (OBB).
+- Only does one thing: compute immediate collision results per query, Performs single-shot SAT rectangle collision detection with extremely high efficiency, Detects collisions between a rotated rectangle (OBB).
+- Optimized with **float32** and `-ffast-math`, Sacrifices some numerical precision to maximize performance.
+
 - Uses **WebAssembly SIMD** for vectorized calculations.
-- Optimized with **float32** and `-ffast-math`.
-- Extremely fast: capable of hundreds of thousands of collision checks per frame.
 - Minimal footprint: only `.c` and `.wasm` files are needed.
+- Minimal footprint: only a single `.wasm` file is provided, with **no additional components** (including any JS loader) and **no dependencies**. You need to write your own loader. At runtime, it is recommended to embed it as a base64 string and parse it synchronously, since the module is extremely small.
+
+## Notes / Limitations
+
+- Very small or very large rectangles may encounter precision issues due to float32 limitations.
+- This library does not implement continuous collision detection or physics; it only provides a fast immediate collision check.
+
 ---
 
 ## Files
@@ -42,3 +49,5 @@ wat2wasm rectCollision-f32-simd-tmp.wat -o rectCollision-f32-simd-opt-tmp.wasm
 wasm-opt rectCollision-f32-simd-opt-tmp.wasm -O3 --enable-nontrapping-float-to-int --enable-simd --dce -o rectCollision-f32-simd.wasm
 wasm2wat rectCollision-f32-simd.wasm -o rectCollision-f32-simd.wat
 ```
+
+---
