@@ -1,22 +1,45 @@
 #include <tgmath.h>
 #include <wasm_simd128.h>
 
+#define USE_FLOAT32
+
+#ifdef USE_FLOAT32
+    #define FLOAT float
+    #define f0_5 0.5f
+    #define f10000 10000.0f
+#else
+    #define FLOAT double
+    #define f0_5 0.5
+    #define f10000 10000.0
+#endif
+
 #define true 1
 #define false 0
 #define RECT_PARAM(__NAME__) Vector2 __NAME__[static restrict 4] // 矩形
-
-typedef struct {float x, y;} Vector2; // 向量
-typedef Vector2 RectVertex[4]; // 矩形頂點
-typedef struct {Vector2 min, max;} Bounding; // 包圍盒
 
 #ifdef __INTELLISENSE__
 // 這段只給 VSCode IntelliSense 看
 v128_t __builtin_wasm_shuffle_i8x16(v128_t, v128_t, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int);
 #endif
 
+typedef struct {FLOAT x, y;} Vector2; // 向量
+typedef Vector2 RectVertex[4]; // 矩形頂點
+typedef struct {Vector2 min, max;} Bounding; // 包圍盒
+typedef struct {v128_t low, high;} v256_t;
+
+static inline v256_t wasm_f64x4_splat(double a) {return (v256_t){.low = wasm_f64x2_splat(a), .high = wasm_f64x2_splat(a)};}
+static inline v256_t wasm_f64x4_make(double a, double b, double c, double d) {return (v256_t){.low = wasm_f64x2_make(a, b), .high = wasm_f64x2_make(c, d)};}
+static inline v256_t wasm_f64x4_mul(v256_t a, v256_t b) {return (v256_t){.low = wasm_f64x2_mul(a.low, b.low), .high = wasm_f64x2_mul(a.high, b.high)};}
+static inline v256_t wasm_f64x4_add(v256_t a, v256_t b) {return (v256_t){.low = wasm_f64x2_add(a.low, b.low), .high = wasm_f64x2_add(a.high, b.high)};}
+static inline v256_t wasm_f64x4_min(v256_t a, v256_t b) {return (v256_t){.low = wasm_f64x2_min(a.low, b.low), .high = wasm_f64x2_min(a.high, b.high)};}
+static inline v256_t wasm_f64x4_max(v256_t a, v256_t b) {return (v256_t){.low = wasm_f64x2_max(a.low, b.low), .high = wasm_f64x2_max(a.high, b.high)};}
+static inline v256_t wasm_f64x4_lt(v256_t a, v256_t b) {return (v256_t){.low = wasm_f64x2_lt(a.low, b.low), .high = wasm_f64x2_lt(a.high, b.high)};}
+static inline bool wasm_v256_any_true(v256_t a) {return wasm_v128_any_true(a.low) || wasm_v128_any_true(a.high);}
+#define wasm_v64x4_shuffle(a, b, c0, c1, c2, c3) (v256_t){.low = wasm_v64x2_shuffle(a.low, b.high, c0, c1), .high = wasm_v64x2_shuffle(a.low, b.high, c2, c3)}
+
 // 獲取無旋轉矩形頂點
-static inline void _getAABB(RECT_PARAM(result), float x, float y, float w, float h) {
-    float hw = w * 0.5f, hh = h * 0.5f;
+static inline void _getAABB(RECT_PARAM(result), FLOAT x, FLOAT y, FLOAT w, FLOAT h) {
+    FLOAT hw = w * f0_5, hh = h * f0_5;
     result[0].x = result[3].x = x - hw;
     result[1].y = result[0].y = y - hh;
     result[2].x = result[1].x = x + hw;
@@ -24,10 +47,10 @@ static inline void _getAABB(RECT_PARAM(result), float x, float y, float w, float
 }
 
 // 獲取矩形頂點
-static inline void _getOBB(RECT_PARAM(result), float x, float y, float w, float h, float r) {
-    float hw = w * 0.5f, hh = h * 0.5f;
-    float c = cos(r), s = sin(r);
-    float hw_c = hw * c, hh_s = hh * s, hw_s = hw * s, hh_c = hh * c;
+static inline void _getOBB(RECT_PARAM(result), FLOAT x, FLOAT y, FLOAT w, FLOAT h, FLOAT r) {
+    FLOAT hw = w * f0_5, hh = h * f0_5;
+    FLOAT c = cos(r), s = sin(r);
+    FLOAT hw_c = hw * c, hh_s = hh * s, hw_s = hw * s, hh_c = hh * c;
     result[0].x = x - hw_c + hh_s; result[0].y = y - hw_s - hh_c;
     result[1].x = x + hw_c + hh_s; result[1].y = y + hw_s - hh_c;
     result[2].x = x + hw_c - hh_s; result[2].y = y + hw_s + hh_c;
@@ -35,9 +58,9 @@ static inline void _getOBB(RECT_PARAM(result), float x, float y, float w, float 
 }
 
 // 點繞圓旋轉
-static inline void _pointRotateAround(float px[static restrict 1], float py[static restrict 1], float cx, float cy, float r) {
-    float s = sin(r), c = cos(r);
-    float x = *px - cx, y = *py - cy; // 平移到原點
+static inline void _rotateAround(FLOAT px[static restrict 1], FLOAT py[static restrict 1], FLOAT cx, FLOAT cy, FLOAT r) {
+    FLOAT s = sin(r), c = cos(r);
+    FLOAT x = *px - cx, y = *py - cy; // 平移到原點
 
     // 旋轉並平移回原位
     *px = x * c - y * s + cx;
@@ -77,6 +100,7 @@ static inline bool _satAABBvsOBB(RECT_PARAM(rect1), RECT_PARAM(rect2)) {
         axes[i].y = (rect2[next].x - rect2[i].x);
     }
 
+#ifdef USE_FLOAT32
     v128_t vaxis0_x = wasm_f32x4_splat(axes[0].x);
     v128_t vaxis0_y = wasm_f32x4_splat(axes[0].y);
     v128_t vaxis1_x = wasm_f32x4_splat(axes[1].x);
@@ -109,19 +133,53 @@ static inline bool _satAABBvsOBB(RECT_PARAM(rect1), RECT_PARAM(rect2)) {
 
     v128_t cmp = wasm_f32x4_lt(vmax, wasm_v32x4_shuffle(vmin, vmin, 1, 0, 3, 2));
     return !wasm_v128_any_true(cmp);
+#else
+    v256_t vaxis0_x = wasm_f64x4_splat(axes[0].x);
+    v256_t vaxis0_y = wasm_f64x4_splat(axes[0].y);
+    v256_t vaxis1_x = wasm_f64x4_splat(axes[1].x);
+    v256_t vaxis1_y = wasm_f64x4_splat(axes[1].y);
+
+    v256_t vrect1_x = wasm_f64x4_make(rect1[0].x, rect1[1].x, rect1[2].x, rect1[3].x);
+    v256_t vrect1_y = wasm_f64x4_make(rect1[0].y, rect1[1].y, rect1[2].y, rect1[3].y);
+    v256_t vrect2_x = wasm_f64x4_make(rect2[0].x, rect2[1].x, rect2[2].x, rect2[3].x);
+    v256_t vrect2_y = wasm_f64x4_make(rect2[0].y, rect2[1].y, rect2[2].y, rect2[3].y);
+
+    v256_t projs[4] = {
+        wasm_f64x4_add(wasm_f64x4_mul(vaxis0_x, vrect1_x), wasm_f64x4_mul(vaxis0_y, vrect1_y)),
+        wasm_f64x4_add(wasm_f64x4_mul(vaxis0_x, vrect2_x), wasm_f64x4_mul(vaxis0_y, vrect2_y)),
+        wasm_f64x4_add(wasm_f64x4_mul(vaxis1_x, vrect1_x), wasm_f64x4_mul(vaxis1_y, vrect1_y)),
+        wasm_f64x4_add(wasm_f64x4_mul(vaxis1_x, vrect2_x), wasm_f64x4_mul(vaxis1_y, vrect2_y))
+    };
+    // 交換相鄰行內的低兩個元素
+    v256_t t0 = wasm_v64x4_shuffle(projs[0], projs[1], 0, 4, 1, 5);
+    v256_t t1 = wasm_v64x4_shuffle(projs[0], projs[1], 2, 6, 3, 7);
+    v256_t t2 = wasm_v64x4_shuffle(projs[2], projs[3], 0, 4, 1, 5);
+    v256_t t3 = wasm_v64x4_shuffle(projs[2], projs[3], 2, 6, 3, 7);
+
+    // 交叉合併上下兩組
+    v256_t va = wasm_v64x4_shuffle(t0, t2, 0, 1, 4, 5);
+    v256_t vb = wasm_v64x4_shuffle(t0, t2, 2, 3, 6, 7);
+    v256_t vc = wasm_v64x4_shuffle(t1, t3, 0, 1, 4, 5);
+    v256_t vd = wasm_v64x4_shuffle(t1, t3, 2, 3, 6, 7);
+    v256_t vmin = wasm_f64x4_min(wasm_f64x4_min(va, vb), wasm_f64x4_min(vc, vd));
+    v256_t vmax = wasm_f64x4_max(wasm_f64x4_max(va, vb), wasm_f64x4_max(vc, vd));
+
+    v256_t cmp = wasm_f64x4_lt(vmax, wasm_v64x4_shuffle(vmin, vmin, 1, 0, 3, 2));
+    return !wasm_v256_any_true(cmp);
+#endif
 }
 
 // 碰撞偵測(基於變換數據)
 bool rectCollision(
-    float x1, float y1, float w1, float h1, float r1,
-    float x2, float y2, float w2, float h2, float r2
+    FLOAT x1, FLOAT y1, FLOAT w1, FLOAT h1, FLOAT r1,
+    FLOAT x2, FLOAT y2, FLOAT w2, FLOAT h2, FLOAT r2
 ) {
-    if (fabs(r1) > 1e-5f) _pointRotateAround(&x2, &y2, x1, y1, -r1);
+    if (fabs(r1) > 1e-5f) _rotateAround(&x2, &y2, x1, y1, -r1);
 
     RectVertex rect1, rect2;
     _getAABB(rect1, x1, y1, w1, h1);
-    float newr2 = r2 - r1;
-    int intRad = (int)round(newr2 * 10000.0f);
+    FLOAT newr2 = r2 - r1;
+    int intRad = (int)round(newr2 * f10000);
     if (intRad % 15708 == 0) {
         int isSwapped = intRad % 31416 != 0;
         _getAABB(rect2, x2, y2, isSwapped ? h2 : w2, isSwapped ? w2 : h2);
