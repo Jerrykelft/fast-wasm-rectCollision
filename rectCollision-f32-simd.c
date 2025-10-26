@@ -7,14 +7,15 @@
 
 typedef struct {float x, y;} Vector2; // 向量
 typedef Vector2 RectVertex[4]; // 矩形頂點
+typedef struct {Vector2 min, max;} Bounding; // 包圍盒
 
 #ifdef __INTELLISENSE__
 // 這段只給 VSCode IntelliSense 看
 v128_t __builtin_wasm_shuffle_i8x16(v128_t, v128_t, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int);
 #endif
 
-// 獲取無旋轉矩形
-static inline void _getRightRect(RECT_PARAM(result), float x, float y, float w, float h) {
+// 獲取無旋轉矩形頂點
+static inline void _getAABB(RECT_PARAM(result), float x, float y, float w, float h) {
     float hw = w / 2.0f, hh = h / 2.0f;
     result[0].x = result[3].x = x - hw;
     result[1].y = result[0].y = y - hh;
@@ -22,8 +23,8 @@ static inline void _getRightRect(RECT_PARAM(result), float x, float y, float w, 
     result[3].y = result[2].y = y + hh;
 }
 
-// 獲取頂點
-static inline void _getRect(RECT_PARAM(result), float x, float y, float w, float h, float r) {
+// 獲取矩形頂點
+static inline void _getOBB(RECT_PARAM(result), float x, float y, float w, float h, float r) {
     float hw = w / 2.0f, hh = h / 2.0f;
     float c = cos(r), s = sin(r);
     float hw_c = hw * c, hh_s = hh * s, hw_s = hw * s, hh_c = hh * c;
@@ -44,19 +45,24 @@ static inline void _pointRotateAround(float px[static restrict 1], float py[stat
 }
 
 // 計算矩形邊界
-static inline void _rectBounds(RECT_PARAM(rect), Vector2 min[static restrict 1], Vector2 max[static restrict 1]) {
-    min->x = fmin(fmin(rect[0].x, rect[1].x), fmin(rect[2].x, rect[3].x));
-    min->y = fmin(fmin(rect[0].y, rect[1].y), fmin(rect[2].y, rect[3].y));
-    max->x = fmax(fmax(rect[0].x, rect[1].x), fmax(rect[2].x, rect[3].x));
-    max->y = fmax(fmax(rect[0].y, rect[1].y), fmax(rect[2].y, rect[3].y));
+static inline Bounding _rectBounding(RECT_PARAM(rect)) {
+    return (Bounding){
+        .min = (Vector2){
+            .x = fmin(fmin(rect[0].x, rect[1].x), fmin(rect[2].x, rect[3].x)),
+            .y = fmin(fmin(rect[0].y, rect[1].y), fmin(rect[2].y, rect[3].y))
+        },
+        .max = (Vector2){
+            .x = fmax(fmax(rect[0].x, rect[1].x), fmax(rect[2].x, rect[3].x)),
+            .y = fmax(fmax(rect[0].y, rect[1].y), fmax(rect[2].y, rect[3].y))
+        }
+    };
 }
 
 // 包圍盒檢測
 static inline bool _boundingCollision(RECT_PARAM(rect1), RECT_PARAM(rect2)) {
-    Vector2 min1, max1, min2, max2;
-    _rectBounds(rect1, &min1, &max1);
-    _rectBounds(rect2, &min2, &max2);
-    return !(max1.x < min2.x || min1.x > max2.x || max1.y < min2.y || min1.y > max2.y);
+    Bounding a = _rectBounding(rect1);
+    Bounding b = _rectBounding(rect2);
+    return !(a.max.x < b.min.x || a.min.x > b.max.x || a.max.y < b.min.y || a.min.y > b.max.y);
 }
 
 // AABB vs OBB SAT 判定，AABB 為 rect1(未旋轉)，OBB 為 rect2(已旋轉)
@@ -113,15 +119,15 @@ bool rectCollision(
     if (fabs(r1) > 1e-5f) _pointRotateAround(&x2, &y2, x1, y1, -r1);
 
     RectVertex rect1, rect2;
-    _getRightRect(rect1, x1, y1, w1, h1);
+    _getAABB(rect1, x1, y1, w1, h1);
     float newr2 = r2 - r1;
     int intRad = (int)round(newr2 * 10000.0f);
     if (intRad % 15708 == 0) {
         int isSwapped = intRad % 31416 != 0;
-        _getRightRect(rect2, x2, y2, isSwapped ? h2 : w2, isSwapped ? w2 : h2);
+        _getAABB(rect2, x2, y2, isSwapped ? h2 : w2, isSwapped ? w2 : h2);
         return _boundingCollision(rect1, rect2);
     }
-    _getRect(rect2, x2, y2, w2, h2, newr2);
+    _getOBB(rect2, x2, y2, w2, h2, newr2);
     return _satAABBvsOBB(rect1, rect2);
 }
 
