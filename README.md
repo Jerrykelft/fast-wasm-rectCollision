@@ -32,22 +32,21 @@ This project provides a minimal WebAssembly module compiled from C, implementing
 
 The following commands were used to compile and optimize the WebAssembly module:
 
-
-以下是編譯指令  
 ```bash
-emcc -o rectCollision-f32-simd-tmp.wasm rectCollision-f32-simd.c --no-entry -O3 -msimd128 -flto -ffast-math -s STANDALONE_WASM=1 -s EXPORTED_FUNCTIONS=\"[\'_rectCollision\']\" -s INITIAL_MEMORY=131072
+emcc -o rectCollision.wasm rectCollision.c --no-entry -O3 -msimd128 -flto -ffast-math -s STANDALONE_WASM=1 -s EXPORTED_FUNCTIONS=\"[\'_rectCollision\']\" -s INITIAL_MEMORY=131072
 ```
 
 After compilation, the resulting WebAssembly module may include some template runtime support code inserted by Emscripten. In 99% of cases, you don’t need this code. You can use the following commands to decompile the .wasm to .wat, remove unnecessary exported runtime functions to make them dead code, and then run binaryen/wasm-opt to eliminate them, achieving a minimal optimized module.
 
 ```bash
-wasm2wat rectCollision-f32-simd-tmp.wasm -o rectCollision-f32-simd-tmp.wat
+wasm2wat rectCollision.wasm -o rectCollision-tmp.wat
 
 # After pruning unnecessary exports, recompile back to wasm
 
-wat2wasm rectCollision-f32-simd-tmp.wat -o rectCollision-f32-simd-opt-tmp.wasm
-wasm-opt rectCollision-f32-simd-opt-tmp.wasm -O3 --enable-nontrapping-float-to-int --enable-simd --dce -o rectCollision-f32-simd.wasm
-wasm2wat rectCollision-f32-simd.wasm -o rectCollision-f32-simd.wat
+wat2wasm rectCollision-tmp.wat -o rectCollision-opt-tmp.wasm
+wasm-opt rectCollision-opt-tmp.wasm -o rectCollision.wasm -O3 --enable-nontrapping-float-to-int --enable-simd --dce
+
+wasm2wat rectCollision.wasm -o rectCollision.wat
 ```
 
 ---

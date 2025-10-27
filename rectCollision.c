@@ -1,16 +1,16 @@
 #include <tgmath.h>
 #include <wasm_simd128.h>
 
-#define USE_FLOAT32
-
-#ifdef USE_FLOAT32
+#ifndef FLOAT64
     #define FLOAT float
     #define f0_5 0.5f
     #define f10000 10000.0f
+    #define f1e_5 1e-5f
 #else
     #define FLOAT double
     #define f0_5 0.5
     #define f10000 10000.0
+    #define f1e_5 1e-5
 #endif
 
 #define true 1
@@ -83,20 +83,9 @@ static inline Bounding _rectBounding(RECT_PARAM(rect)) {
 
 // 包圍盒檢測
 static inline bool _boundingCollision(RECT_PARAM(rect1), RECT_PARAM(rect2)) {
-#ifdef USE_FLOAT32
-    v128_t va = wasm_f32x4_make(rect1[0].x, rect2[0].x, rect1[0].y, rect2[0].y);
-    v128_t vb = wasm_f32x4_make(rect1[1].x, rect2[1].x, rect1[1].y, rect2[1].y);
-    v128_t vc = wasm_f32x4_make(rect1[2].x, rect2[2].x, rect1[2].y, rect2[2].y);
-    v128_t vd = wasm_f32x4_make(rect1[3].x, rect2[3].x, rect1[3].y, rect2[3].y);
-    v128_t vmin = wasm_f32x4_pmin(wasm_f32x4_pmin(va, vb), wasm_f32x4_pmin(vc, vd));
-    v128_t vmax = wasm_f32x4_pmax(wasm_f32x4_pmax(va, vb), wasm_f32x4_pmax(vc, vd));
-
-    return !wasm_v128_any_true(wasm_f32x4_lt(wasm_v32x4_shuffle(vmax, vmax, 1, 0, 3, 2), vmin));
-#else
     Bounding a = _rectBounding(rect1);
     Bounding b = _rectBounding(rect2);
     return !(a.max.x < b.min.x || a.min.x > b.max.x || a.max.y < b.min.y || a.min.y > b.max.y);
-#endif
 }
 
 // AABB vs OBB SAT 判定，AABB 為 rect1(未旋轉)，OBB 為 rect2(已旋轉)
@@ -111,7 +100,7 @@ static inline bool _satAABBvsOBB(RECT_PARAM(rect1), RECT_PARAM(rect2)) {
         axes[i].y = (rect2[next].x - rect2[i].x);
     }
 
-#ifdef USE_FLOAT32
+#ifndef FLOAT64
     v128_t vaxis0_x = wasm_f32x4_splat(axes[0].x);
     v128_t vaxis0_y = wasm_f32x4_splat(axes[0].y);
     v128_t vaxis1_x = wasm_f32x4_splat(axes[1].x);
@@ -185,7 +174,7 @@ bool rectCollision(
     FLOAT x1, FLOAT y1, FLOAT w1, FLOAT h1, FLOAT r1,
     FLOAT x2, FLOAT y2, FLOAT w2, FLOAT h2, FLOAT r2
 ) {
-    if (fabs(r1) > 1e-5f) _rotateAround(&x2, &y2, x1, y1, -r1);
+    if (fabs(r1) > f1e_5) _rotateAround(&x2, &y2, x1, y1, -r1);
 
     RectVertex rect1, rect2;
     _getAABB(rect1, x1, y1, w1, h1);
@@ -202,10 +191,10 @@ bool rectCollision(
 
 /*
 emsdk_env
-emcc -o rectCollision-f32-simd-tmp.wasm rectCollision-f32-simd.c --no-entry -O3 -msimd128 -flto -ffast-math -s STANDALONE_WASM=1 -s EXPORTED_FUNCTIONS="['_rectCollision']" -s INITIAL_MEMORY=131072
-wasm2wat rectCollision-f32-simd-tmp.wasm -o rectCollision-f32-simd-tmp.wat
+emcc -o rectCollision-tmp.wasm rectCollision.c --no-entry -O3 -msimd128 -flto -ffast-math -s STANDALONE_WASM=1 -s EXPORTED_FUNCTIONS="['_rectCollision']" -s INITIAL_MEMORY=131072
+wasm2wat rectCollision-tmp.wasm -o rectCollision-tmp.wat
 
-wat2wasm rectCollision-f32-simd-tmp.wat -o rectCollision-f32-simd-opt-tmp.wasm
-wasm-opt rectCollision-f32-simd-opt-tmp.wasm -O3 --enable-nontrapping-float-to-int --enable-simd --dce -o rectCollision-f32-simd.wasm
-wasm2wat rectCollision-f32-simd.wasm -o rectCollision-f32-simd.wat
+wat2wasm rectCollision-tmp.wat -o rectCollision-opt-tmp.wasm
+wasm-opt rectCollision-opt-tmp.wasm -o build/rectCollision.wasm -O3 --enable-nontrapping-float-to-int --enable-simd --dce
+wasm2wat rectCollision.wasm -o rectCollision.wat
 */
