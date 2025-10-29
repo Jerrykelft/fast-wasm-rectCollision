@@ -46,7 +46,7 @@ Returns `1` if the rectangles are colliding, `0` otherwise.
 2. Run the compilation script:
 
 ```powershell
-./compile.ps1
+powershell -File "./compile.ps1"
 ```
 
 The script will:
