@@ -1,7 +1,7 @@
 #include <tgmath.h>
 #include <wasm_simd128.h>
 
-#ifndef FLOAT64
+#ifndef USE_FLOAT64
     #define FLOAT float
     #define f0_5 0.5f
     #define f10000 10000.0f
@@ -12,9 +12,8 @@
     #define f10000 10000.0
     #define f1e_5 1e-5
 #endif
+#define RECT_COLLISION_PARAM FLOAT x1, FLOAT y1, FLOAT w1, FLOAT h1, FLOAT r1, FLOAT x2, FLOAT y2, FLOAT w2, FLOAT h2, FLOAT r2
 
-#define true 1
-#define false 0
 #define RECT_PARAM(__NAME__) Vector2 __NAME__[static restrict 4] // 矩形
 
 #ifdef __INTELLISENSE__
@@ -49,7 +48,7 @@ static inline void _getAABB(RECT_PARAM(result), FLOAT x, FLOAT y, FLOAT w, FLOAT
 // 獲取矩形頂點
 static inline void _getOBB(RECT_PARAM(result), FLOAT x, FLOAT y, FLOAT w, FLOAT h, FLOAT r) {
     FLOAT hw = w * f0_5, hh = h * f0_5;
-    FLOAT c = cos(r), s = sin(r);
+    FLOAT s = sin(r), c = cos(r);
     FLOAT hw_c = hw * c, hh_s = hh * s, hw_s = hw * s, hh_c = hh * c;
     result[0].x = x - hw_c + hh_s; result[0].y = y - hw_s - hh_c;
     result[1].x = x + hw_c + hh_s; result[1].y = y + hw_s - hh_c;
@@ -88,19 +87,21 @@ static inline bool _boundingCollision(RECT_PARAM(rect1), RECT_PARAM(rect2)) {
     return !(a.max.x < b.min.x || a.min.x > b.max.x || a.max.y < b.min.y || a.min.y > b.max.y);
 }
 
+static inline bool _AABBvsAABB(RECT_PARAM(rect1), RECT_PARAM(rect2)) {
+    return !(rect1[1].x < rect2[0].x || rect1[0].x > rect2[1].x || rect1[0].y < rect2[2].y || rect1[2].y > rect2[0].y);
+}
+
 // AABB vs OBB SAT 判定，AABB 為 rect1(未旋轉)，OBB 為 rect2(已旋轉)
 static inline bool _satAABBvsOBB(RECT_PARAM(rect1), RECT_PARAM(rect2)) {
     if (!_boundingCollision(rect1, rect2)) return false;
 
     // 使用 OBB 的邊產生分離軸
-    Vector2 axes[2];
-    for (int i = 0; i < 2; i++) {
-        int next = (i + 1) % 4;
-        axes[i].x = -(rect2[next].y - rect2[i].y);
-        axes[i].y = (rect2[next].x - rect2[i].x);
-    }
+    Vector2 axes[2] = {
+        {.x = -(rect2[1].y - rect2[0].y), .y = rect2[1].x - rect2[0].x},
+        {.x = -(rect2[2].y - rect2[1].y), .y = rect2[2].x - rect2[1].x}
+    };
 
-#ifndef FLOAT64
+#ifndef USE_FLOAT64
     v128_t vaxis0_x = wasm_f32x4_splat(axes[0].x);
     v128_t vaxis0_y = wasm_f32x4_splat(axes[0].y);
     v128_t vaxis1_x = wasm_f32x4_splat(axes[1].x);
@@ -170,10 +171,16 @@ static inline bool _satAABBvsOBB(RECT_PARAM(rect1), RECT_PARAM(rect2)) {
 }
 
 // 碰撞偵測(基於變換數據)
-bool rectCollision(
-    FLOAT x1, FLOAT y1, FLOAT w1, FLOAT h1, FLOAT r1,
-    FLOAT x2, FLOAT y2, FLOAT w2, FLOAT h2, FLOAT r2
-) {
+#if defined(USE_FLOAT64) && defined(__FAST_MATH__)
+bool rectCollisionF64fast(RECT_COLLISION_PARAM) // f64-fast-math
+#elif defined(USE_FLOAT64)
+bool rectCollisionF64(RECT_COLLISION_PARAM) // f64
+#elif defined(__FAST_MATH__)
+bool rectCollisionF32fast(RECT_COLLISION_PARAM) // f32-fast-math
+#else
+bool rectCollisionF32(RECT_COLLISION_PARAM) // f32
+#endif
+{
     if (fabs(r1) > f1e_5) _rotateAround(&x2, &y2, x1, y1, -r1);
 
     RectVertex rect1, rect2;
@@ -183,18 +190,14 @@ bool rectCollision(
     if (intRad % 15708 == 0) {
         int isSwapped = intRad % 31416 != 0;
         _getAABB(rect2, x2, y2, isSwapped ? h2 : w2, isSwapped ? w2 : h2);
-        return _boundingCollision(rect1, rect2);
+        return _AABBvsAABB(rect1, rect2);
     }
     _getOBB(rect2, x2, y2, w2, h2, newr2);
     return _satAABBvsOBB(rect1, rect2);
 }
 
 /*
-emsdk_env
-emcc -o rectCollision-tmp.wasm rectCollision.c --no-entry -O3 -msimd128 -flto -ffast-math -s STANDALONE_WASM=1 -s EXPORTED_FUNCTIONS="['_rectCollision']" -s INITIAL_MEMORY=131072
-wasm2wat rectCollision-tmp.wasm -o rectCollision-tmp.wat
-
-wat2wasm rectCollision-tmp.wat -o rectCollision-opt-tmp.wasm
-wasm-opt rectCollision-opt-tmp.wasm -o build/rectCollision.wasm -O3 --enable-nontrapping-float-to-int --enable-simd --dce
+wat2wasm rectCollision.wat -o rectCollision.wasm
+wasm-opt rectCollision.wasm -o rectCollision.wasm -O3 --enable-nontrapping-float-to-int --enable-simd --dce
 wasm2wat rectCollision.wasm -o rectCollision.wat
 */
