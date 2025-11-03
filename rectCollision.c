@@ -6,13 +6,15 @@
     #define f0_5 0.5f
     #define f10000 10000.0f
     #define f1e_5 1e-5f
+    #define f0 0.0f
 #else
     #define FLOAT double
     #define f0_5 0.5
     #define f10000 10000.0
     #define f1e_5 1e-5
+    #define f0 0.0
 #endif
-#define RECT_COLLISION_PARAM FLOAT x1, FLOAT y1, FLOAT w1, FLOAT h1, FLOAT r1, FLOAT x2, FLOAT y2, FLOAT w2, FLOAT h2, FLOAT r2
+#define RECT_COLLISION_PARAM double x1, double y1, FLOAT w1, FLOAT h1, FLOAT r1, double x2, double y2, FLOAT w2, FLOAT h2, FLOAT r2
 
 #define RECT_PARAM(__NAME__) Vector2 __NAME__[static restrict 4] // 矩形
 
@@ -208,18 +210,20 @@ bool rectCollisionF32fast(RECT_COLLISION_PARAM) // f32-fast-math
 bool rectCollisionF32(RECT_COLLISION_PARAM) // f32
 #endif
 {
-    if (fabs(r1) > f1e_5) _rotateAround(&x2, &y2, x1, y1, -r1);
+    FLOAT x = x2 - x1;
+    FLOAT y = y2 - y1;
+    if (fabs(r1) > f1e_5) _rotateAround(&x, &y, f0, f0, -r1);
 
     RectVertex rect1, rect2;
-    _getAABB(rect1, x1, y1, w1, h1);
+    _getAABB(rect1, f0, f0, w1, h1);
     FLOAT newr2 = r2 - r1;
     int intRad = (int)round(newr2 * f10000);
     if (intRad % 15708 == 0) {
         int isSwapped = intRad % 31416 != 0;
-        _getAABB(rect2, x2, y2, isSwapped ? h2 : w2, isSwapped ? w2 : h2);
+        _getAABB(rect2, x, y, isSwapped ? h2 : w2, isSwapped ? w2 : h2);
         return _AABBvsAABB(rect1, rect2);
     }
-    _getOBB(rect2, x2, y2, w2, h2, newr2);
+    _getOBB(rect2, x, y, w2, h2, newr2);
     return _satAABBvsOBB(rect1, rect2);
 }
 
