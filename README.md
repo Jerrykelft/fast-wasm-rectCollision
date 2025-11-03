@@ -52,7 +52,7 @@ powershell -File "./compile.ps1"
 The script will:
 1. Compile separate object files for each variant (f32/f64, with/without fast-math)
 2. Link them into a single WebAssembly module
-3. Generate both `.wasm` and `.wat` files
+3. Generate both `.wasm` files
 4. Clean up temporary object files
 
 ## Usage Example

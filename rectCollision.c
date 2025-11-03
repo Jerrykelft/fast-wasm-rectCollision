@@ -170,6 +170,33 @@ static inline bool _satAABBvsOBB(RECT_PARAM(rect1), RECT_PARAM(rect2)) {
 #endif
 }
 
+// typedef struct {FLOAT min, max;} Project; // 投影
+// static inline Project _projectPolygon(Vector2 axis, RECT_PARAM(rect)) {
+//     FLOAT min = axis.x * rect[0].x + axis.y * rect[0].y;
+//     FLOAT max = min;
+//     for (int i = 1; i < 4; i++) {
+//         FLOAT p = axis.x * rect[i].x + axis.y * rect[i].y;
+//         if (p < min) min = p;
+//         if (p > max) max = p;
+//     }
+//     return (Project){min, max};
+// }
+// static inline bool _satAABBvsOBB(RECT_PARAM(rect1), RECT_PARAM(rect2)) {
+//     if (!_boundingCollision(rect1, rect2)) return false;
+//     Vector2 axes[2];
+//     for (int i = 0; i < 2; i++) {
+//         int next = (i + 1) % 4;
+//         axes[i].x = -(rect2[next].y - rect2[i].y);
+//         axes[i].y = (rect2[next].x - rect2[i].x);
+//     }
+//     for (int i = 0; i < 2; i++) {
+//         Project proj1 = _projectPolygon(axes[i], rect1);
+//         Project proj2 = _projectPolygon(axes[i], rect2);
+//         if (proj1.max < proj2.min || proj2.max < proj1.min) return false;
+//     }
+//     return true;
+// }
+
 // 碰撞偵測(基於變換數據)
 #if defined(USE_FLOAT64) && defined(__FAST_MATH__)
 bool rectCollisionF64fast(RECT_COLLISION_PARAM) // f64-fast-math
