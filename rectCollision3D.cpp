@@ -206,9 +206,7 @@ extern "C" {
     }
 }
 
-// 左手黑麥死麵包，右手萬年磚頭餅，身背生鏽大鐵鍬，腳踩爛泥與屍體
-// 後室
-// 維什戴爾 堵橋 毛怪老師 看破不說破 玖玥 nul nil 凱哥 塞琳 懼怕 ky 貓後空翻 馬肅 鋼管 解決電車難題 塞琳 後室 希兒 海賊王 rust
+
 /*
 
 wasm2wat rectCollision3D.wasm -o rectCollision3D.wat
