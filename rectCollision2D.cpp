@@ -16,31 +16,137 @@ extern "C" {
 template <typename FLOAT> \
 requires std::floating_point<FLOAT>
 
+FLOAT_TEMPLATE struct Mat4x4;
+
+template <>
+struct Mat4x4<float>: std::array<Vec4<float>, 4> {
+    inline Mat4x4() {}
+    inline Mat4x4(Vec4<float> a, Vec4<float> b, Vec4<float> c, Vec4<float> d) {
+        (*this)[0].data = a.data;
+        (*this)[1].data = b.data;
+        (*this)[2].data = c.data;
+        (*this)[3].data = d.data;
+    }
+    inline Mat4x4<float>& transpose() {
+        // 交換相鄰行內的低兩個元素
+        v128_t t0 = wasm_i32x4_shuffle((*this)[0].data.vector, (*this)[1].data.vector, 0, 4, 1, 5);
+        v128_t t1 = wasm_i32x4_shuffle((*this)[0].data.vector, (*this)[1].data.vector, 2, 6, 3, 7);
+        v128_t t2 = wasm_i32x4_shuffle((*this)[2].data.vector, (*this)[3].data.vector, 0, 4, 1, 5);
+        v128_t t3 = wasm_i32x4_shuffle((*this)[2].data.vector, (*this)[3].data.vector, 2, 6, 3, 7);
+
+        // 交叉合併上下兩組
+        (*this)[0] = wasm_i32x4_shuffle(t0, t2, 0, 1, 4, 5);
+        (*this)[1] = wasm_i32x4_shuffle(t0, t2, 2, 3, 6, 7);
+        (*this)[2] = wasm_i32x4_shuffle(t1, t3, 0, 1, 4, 5);
+        (*this)[3] = wasm_i32x4_shuffle(t1, t3, 2, 3, 6, 7);
+        return *this;
+    }
+};
+
+template <>
+struct Mat4x4<double>: std::array<Vec4<double>, 4> {
+    inline Mat4x4() {}
+    inline Mat4x4(Vec4<double> a, Vec4<double> b, Vec4<double> c, Vec4<double> d) {
+        (*this)[0].data = a.data;
+        (*this)[1].data = b.data;
+        (*this)[2].data = c.data;
+        (*this)[3].data = d.data;
+    }
+    inline Mat4x4<double>& transpose() {
+        // 交換相鄰行內的低兩個元素
+        v256_t t0 = wasm_i64x4_shuffle((*this)[0].data.vector, (*this)[1].data.vector, 0, 4, 1, 5);
+        v256_t t1 = wasm_i64x4_shuffle((*this)[0].data.vector, (*this)[1].data.vector, 2, 6, 3, 7);
+        v256_t t2 = wasm_i64x4_shuffle((*this)[2].data.vector, (*this)[3].data.vector, 0, 4, 1, 5);
+        v256_t t3 = wasm_i64x4_shuffle((*this)[2].data.vector, (*this)[3].data.vector, 2, 6, 3, 7);
+
+        // 交叉合併上下兩組
+        (*this)[0] = wasm_i64x4_shuffle(t0, t2, 0, 1, 4, 5);
+        (*this)[1] = wasm_i64x4_shuffle(t0, t2, 2, 3, 6, 7);
+        (*this)[2] = wasm_i64x4_shuffle(t1, t3, 0, 1, 4, 5);
+        (*this)[3] = wasm_i64x4_shuffle(t1, t3, 2, 3, 6, 7);
+        return *this;
+    }
+};
+
+FLOAT_TEMPLATE struct Vec2x4;
+
 // 向量
 FLOAT_TEMPLATE struct Vec2 {
     FLOAT x, y;
     inline Vec2() {}
     inline Vec2(FLOAT _x, FLOAT _y): x(_x), y(_y) {}
+    inline Vec2 operator+(Vec2 other) const {return {x + other.x, y + other.y};}
+    inline Vec2 operator-(Vec2 other) const {return {x - other.x, y - other.y};}
+    inline FLOAT dot(Vec2 other) const {return x * other.x + y * other.y;}
+    inline Vec4<FLOAT> dot(Vec2x4<FLOAT>other) const {
+        return Vec4<FLOAT>(x) * other.data.vector.vx + Vec4<FLOAT>(y) * other.data.vector.vy;
+    }
 };
-FLOAT_TEMPLATE struct RectVertexSIMD {
-    std::array<FLOAT, 4> x, y;
+template <>
+struct Vec2x4<float> {
+    union {
+        struct {v128_t vx, vy;} vector;
+        struct {std::array<float, 4> x, y;} scalar;
+    } data;
+    inline Vec2x4() {}
+    inline Vec2x4(float x, float y) {data.vector.vx = wasm_f32x4_splat(x); data.vector.vy = wasm_f32x4_splat(y);}
+    inline Vec2x4(std::array<float, 4> x, std::array<float, 4> y) {data.scalar.x = x; data.scalar.y = y;}
+    inline Vec2x4(v128_t x, v128_t y) {data.vector.vx = x; data.vector.vy = y;}
+    inline Vec2x4(Vec4<float> x, Vec4<float> y) {data.vector.vx = x.data.vector; data.vector.vy = y.data.vector;}
+};
+template <>
+struct Vec2x4<double> {
+    union {
+        struct {v256_t vx, vy;} vector;
+        struct {std::array<double, 4> x, y;} scalar;
+    } data;
+    inline Vec2x4() {}
+    inline Vec2x4(double x, double y) {data.vector.vx = wasm_f64x4_splat(x); data.vector.vy = wasm_f64x4_splat(y);}
+    inline Vec2x4(std::array<double, 4> x, std::array<double, 4> y) {data.scalar.x = x; data.scalar.y = y;}
+    inline Vec2x4(v256_t x, v256_t y) {data.vector.vx = x; data.vector.vy = y;}
+    inline Vec2x4(Vec4<double> x, Vec4<double> y) {data.vector.vx = x.data.vector; data.vector.vy = y.data.vector;}
+};
+
+
+FLOAT_TEMPLATE struct RectVertexSIMD;
+template <>
+struct RectVertexSIMD<float> {
+    union {
+        struct {v128_t vx, vy;} vector;
+        struct {std::array<float, 4> x, y;} scalar;
+    } data;
     inline RectVertexSIMD() {}
-    inline RectVertexSIMD(std::array<FLOAT, 4> _x, std::array<FLOAT, 4> _y): x(_x), y(_y) {}
-    inline RectVertexSIMD(v128_t _x, v128_t _y) {
-        wasm_v128_store(&x, _x);
-        wasm_v128_store(&y, _y);
+    inline RectVertexSIMD(std::array<float, 4> x, std::array<float, 4> y) {
+        data.scalar.x = x;
+        data.scalar.y = y;
     }
-    inline RectVertexSIMD(v256_t _x, v256_t _y) {
-        wasm_v256_store(&x, _x);
-        wasm_v256_store(&y, _y);
+    inline RectVertexSIMD(v128_t x, v128_t y) {
+        data.vector.vx = x;
+        data.vector.vy = y;
     }
-    inline RectVertexSIMD(Vec4<float> _x, Vec4<float> _y) {
-        wasm_v128_store(&x, _x.data);
-        wasm_v128_store(&y, _y.data);
+    inline RectVertexSIMD(Vec4<float> x, Vec4<float> y) {
+        data.vector.vx = x.data.vector;
+        data.vector.vy = y.data.vector;
     }
-    inline RectVertexSIMD(Vec4<double> _x, Vec4<double> _y) {
-        wasm_v256_store(&x, _x.data);
-        wasm_v256_store(&y, _y.data);
+};
+template <>
+struct RectVertexSIMD<double> {
+    union {
+        struct {v256_t vx, vy;} vector;
+        struct {std::array<double, 4> x, y;} scalar;
+    } data;
+    inline RectVertexSIMD() {}
+    inline RectVertexSIMD(std::array<double, 4> x, std::array<double, 4> y) {
+        data.scalar.x = x;
+        data.scalar.y = y;
+    }
+    inline RectVertexSIMD(v256_t x, v256_t y) {
+        data.vector.vx = x;
+        data.vector.vy = y;
+    }
+    inline RectVertexSIMD(Vec4<double> x, Vec4<double> y) {
+        data.vector.vx = x.data.vector;
+        data.vector.vy = y.data.vector;
     }
 };
 // 包圍盒
@@ -51,14 +157,65 @@ FLOAT_TEMPLATE struct Bounding {
 };
 FLOAT_TEMPLATE using RectVertex = std::array<Vec2<FLOAT>, 4>; // 矩形頂點
 
+
+FLOAT_TEMPLATE static inline bool check_collision_obb2d(
+    double x1, double y1, FLOAT w1, FLOAT h1, FLOAT r1,
+    double x2, double y2, FLOAT w2, FLOAT h2, FLOAT r2
+) {
+    // wasm_f64x2_sincos(wasm_f64x2_make(r1, r2));
+    FLOAT s1 = sin(r1), c1 = cos(r1),
+          s2 = sin(r2), c2 = cos(r2);
+    FLOAT x = x2 - x1, y = y2 - y1;
+    Vec2<FLOAT> axis[4] = {{c1, s1}, {-s1, c1}, {c2, s2}, {-s2, c2}},
+                D = {x, y};
+    Vec2x4<FLOAT> vaxis = {std::array<FLOAT, 4>{c1, -s1, c2, -s2}, std::array<FLOAT, 4>{s1, c1, s2, c2}};
+
+    FLOAT hw1 = w1 * 0.5f,
+          hh1 = h1 * 0.5f,
+          hw2 = w2 * 0.5f,
+          hh2 = h2 * 0.5f;
+
+    // 使用 broadcast 進行四軸 dot
+    Vec4<FLOAT> limit = (Vec4<FLOAT>(hw1) * (axis[0].dot(vaxis))).abs() +
+                        (Vec4<FLOAT>(hh1) * (axis[1].dot(vaxis))).abs() +
+                        (Vec4<FLOAT>(hw2) * (axis[2].dot(vaxis))).abs() +
+                        (Vec4<FLOAT>(hh2) * (axis[3].dot(vaxis))).abs();
+    return !(D.dot(vaxis).abs() > limit).any_true();
+}
+
+// FLOAT_TEMPLATE static inline bool check_collision_obb2d(
+//     double x1, double y1, FLOAT w1, FLOAT h1, FLOAT r1,
+//     double x2, double y2, FLOAT w2, FLOAT h2, FLOAT r2
+// ) {
+//     FLOAT s1 = sin(r1),
+//           c1 = cos(r1),
+//           s2 = sin(r2),
+//           c2 = cos(r2);
+//     Vec2<FLOAT> axis[4] = {
+//         {c1, s1},
+//         {-s1, c1},
+//         {c2, s2},
+//         {-s2, c2}
+//     };
+//     Vec2<FLOAT> D(x2 - x1, y2 - y1);
+//     for (int i = 0; i < 4; i++) {
+//         FLOAT r = abs(w1 * static_cast<FLOAT>(0.5) * axis[i].dot(axis[0])) +
+//                   abs(h1 * static_cast<FLOAT>(0.5) * axis[i].dot(axis[1])) +
+//                   abs(w2 * static_cast<FLOAT>(0.5) * axis[i].dot(axis[2])) +
+//                   abs(h2 * static_cast<FLOAT>(0.5) * axis[i].dot(axis[3]));
+//         if (abs(D.dot(axis[i])) > r) return false; 
+//     }
+//     return true;
+// }
+
 // 獲取無旋轉矩形頂點
 FLOAT_TEMPLATE static inline RectVertexSIMD<FLOAT> _getAABB(FLOAT x, FLOAT y, FLOAT w, FLOAT h) {
     RectVertexSIMD<FLOAT> result;
     FLOAT hw = w * static_cast<FLOAT>(0.5), hh = h * static_cast<FLOAT>(0.5);
-    result.x[0] = result.x[3] = x - hw;
-    result.y[1] = result.y[0] = y - hh;
-    result.x[2] = result.x[1] = x + hw;
-    result.y[3] = result.y[2] = y + hh;
+    result.data.scalar.x[0] = result.data.scalar.x[3] = x - hw;
+    result.data.scalar.y[1] = result.data.scalar.y[0] = y - hh;
+    result.data.scalar.x[2] = result.data.scalar.x[1] = x + hw;
+    result.data.scalar.y[3] = result.data.scalar.y[2] = y + hh;
     return result;
 }
 
@@ -91,12 +248,12 @@ FLOAT_TEMPLATE static inline void _rotateAround(FLOAT *px, FLOAT *py, FLOAT cx, 
 FLOAT_TEMPLATE static inline Bounding<FLOAT> _rectBounding(RectVertexSIMD<FLOAT> rect) {
     return Bounding<FLOAT>(
         Vec2<FLOAT>(
-            fmin(fmin(rect.x[0], rect.x[1]), fmin(rect.x[2], rect.x[3])),
-            fmin(fmin(rect.y[0], rect.y[1]), fmin(rect.y[2], rect.y[3]))
+            fmin(fmin(rect.data.scalar.x[0], rect.data.scalar.x[1]), fmin(rect.data.scalar.x[2], rect.data.scalar.x[3])),
+            fmin(fmin(rect.data.scalar.y[0], rect.data.scalar.y[1]), fmin(rect.data.scalar.y[2], rect.data.scalar.y[3]))
         ),
         Vec2<FLOAT>(
-            fmax(fmax(rect.x[0], rect.x[1]), fmax(rect.x[2], rect.x[3])),
-            fmax(fmax(rect.y[0], rect.y[1]), fmax(rect.y[2], rect.y[3]))
+            fmax(fmax(rect.data.scalar.x[0], rect.data.scalar.x[1]), fmax(rect.data.scalar.x[2], rect.data.scalar.x[3])),
+            fmax(fmax(rect.data.scalar.y[0], rect.data.scalar.y[1]), fmax(rect.data.scalar.y[2], rect.data.scalar.y[3]))
         )
     );
 }
@@ -107,9 +264,9 @@ FLOAT_TEMPLATE static inline bool _boundingCollision(RectVertexSIMD<FLOAT> rect1
     Bounding<FLOAT> b = _rectBounding(rect2);
     return !(a.max.x < b.min.x || a.min.x > b.max.x || a.max.y < b.min.y || a.min.y > b.max.y);
 }
-
+// 精度下降嚴重
 FLOAT_TEMPLATE static inline bool _AABBvsAABB(RectVertexSIMD<FLOAT> rect1, RectVertexSIMD<FLOAT> rect2) {
-    return !(rect1.x[1] < rect2.x[0] || rect1.x[0] > rect2.x[1] || rect1.y[0] < rect2.y[2] || rect1.y[2] > rect2.y[0]);
+    return !(rect1.data.scalar.x[1] < rect2.data.scalar.x[0] || rect1.data.scalar.x[0] > rect2.data.scalar.x[1] || rect1.data.scalar.y[0] < rect2.data.scalar.y[2] || rect1.data.scalar.y[2] > rect2.data.scalar.y[0]);
 }
 
 // AABB vs OBB SAT 判定，AABB 為 rect1(未旋轉)，OBB 為 rect2(已旋轉)
@@ -118,8 +275,8 @@ FLOAT_TEMPLATE static inline bool _satAABBvsOBB(RectVertexSIMD<FLOAT> rect1, Rec
 
     // 使用 OBB 的邊產生分離軸
     Vec2<FLOAT> axes[2] = {
-        Vec2<FLOAT>(-(rect2.y[1] - rect2.y[0]), rect2.x[1] - rect2.x[0]),
-        Vec2<FLOAT>(-(rect2.y[2] - rect2.y[1]), rect2.x[2] - rect2.x[1])
+        Vec2<FLOAT>(-(rect2.data.scalar.y[1] - rect2.data.scalar.y[0]), rect2.data.scalar.x[1] - rect2.data.scalar.x[0]),
+        Vec2<FLOAT>(-(rect2.data.scalar.y[2] - rect2.data.scalar.y[1]), rect2.data.scalar.x[2] - rect2.data.scalar.x[1])
     };
 
     Vec4<FLOAT> vaxis0_x(axes[0].x);
@@ -127,21 +284,16 @@ FLOAT_TEMPLATE static inline bool _satAABBvsOBB(RectVertexSIMD<FLOAT> rect1, Rec
     Vec4<FLOAT> vaxis1_x(axes[1].x);
     Vec4<FLOAT> vaxis1_y(axes[1].y);
 
-    Vec4<FLOAT> vrect1_x((const void*)&rect1.x);
-    Vec4<FLOAT> vrect1_y((const void*)&rect1.y);
-    Vec4<FLOAT> vrect2_x((const void*)&rect2.x);
-    Vec4<FLOAT> vrect2_y((const void*)&rect2.y);
-
     Mat4x4<FLOAT> projs(
-        vaxis0_x * vrect1_x + vaxis0_y * vrect1_y,
-        vaxis0_x * vrect2_x + vaxis0_y * vrect2_y,
-        vaxis1_x * vrect1_x + vaxis1_y * vrect1_y,
-        vaxis1_x * vrect2_x + vaxis1_y * vrect2_y
+        vaxis0_x * rect1.data.vector.vx + vaxis0_y * rect1.data.vector.vy,
+        vaxis0_x * rect2.data.vector.vx + vaxis0_y * rect2.data.vector.vy,
+        vaxis1_x * rect1.data.vector.vx + vaxis1_y * rect1.data.vector.vy,
+        vaxis1_x * rect2.data.vector.vx + vaxis1_y * rect2.data.vector.vy
     );
     projs.transpose();
 
-    Vec4<FLOAT> vmin = Vec4<FLOAT>::min(Vec4<FLOAT>::min(projs[0], projs[1]), Vec4<FLOAT>::min(projs[2], projs[3]));
-    Vec4<FLOAT> vmax = Vec4<FLOAT>::max(Vec4<FLOAT>::max(projs[0], projs[1]), Vec4<FLOAT>::max(projs[2], projs[3]));
+    Vec4<FLOAT> vmin = Vec4<FLOAT>::pmin(Vec4<FLOAT>::pmin(projs[0], projs[1]), Vec4<FLOAT>::pmin(projs[2], projs[3]));
+    Vec4<FLOAT> vmax = Vec4<FLOAT>::pmax(Vec4<FLOAT>::pmax(projs[0], projs[1]), Vec4<FLOAT>::pmax(projs[2], projs[3]));
 
     if constexpr (std::is_same_v<FLOAT, float>) {
         v128_t cmp = wasm_f32x4_lt(vmax.data, wasm_i32x4_shuffle(vmin.data, vmin.data, 1, 0, 3, 2));
@@ -185,7 +337,7 @@ FLOAT_TEMPLATE static inline bool _satAABBvsOBB(RectVertexSIMD<FLOAT> rect1, Rec
 // }
 
 // 碰撞偵測
-FLOAT_TEMPLATE static inline bool rectCollision(
+FLOAT_TEMPLATE static inline bool _rectCollision(
     double x1, double y1, FLOAT w1, FLOAT h1, FLOAT r1,
     double x2, double y2, FLOAT w2, FLOAT h2, FLOAT r2
 ) {
@@ -213,7 +365,8 @@ extern "C" {
         double x1, double y1, float w1, float h1, float r1,
         double x2, double y2, float w2, float h2, float r2
     ) {
-        return rectCollision<float>(x1, y1, w1, h1, r1, x2, y2, w2, h2, r2);
+        return check_collision_obb2d<float>(x1, y1, w1, h1, r1, x2, y2, w2, h2, r2);
+        // return _rectCollision<float>(x1, y1, w1, h1, r1, x2, y2, w2, h2, r2);
     }
 #ifdef __FAST_MATH__
     bool rectCollisionF64fast
@@ -224,7 +377,8 @@ extern "C" {
         double x1, double y1, double w1, double h1, double r1,
         double x2, double y2, double w2, double h2, double r2
     ) {
-        return rectCollision<double>(x1, y1, w1, h1, r1, x2, y2, w2, h2, r2);
+        return check_collision_obb2d<double>(x1, y1, w1, h1, r1, x2, y2, w2, h2, r2);
+        // return _rectCollision<double>(x1, y1, w1, h1, r1, x2, y2, w2, h2, r2);
     }
 }
 
