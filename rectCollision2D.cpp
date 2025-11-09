@@ -101,62 +101,10 @@ struct Vec2x4<double> {
         struct {std::array<double, 4> x, y;} scalar;
     } data;
     inline Vec2x4() {}
-    inline Vec2x4(double x, double y) {data.vector.vx = wasm_f64x4_splat(x); data.vector.vy = wasm_f64x4_splat(y);}
-    inline Vec2x4(std::array<double, 4> x, std::array<double, 4> y) {data.scalar.x = x; data.scalar.y = y;}
-    inline Vec2x4(v256_t x, v256_t y) {data.vector.vx = x; data.vector.vy = y;}
-    inline Vec2x4(Vec4<double> x, Vec4<double> y) {data.vector.vx = x.data.vector; data.vector.vy = y.data.vector;}
 };
 
-
-FLOAT_TEMPLATE struct RectVertexSIMD;
-template <>
-struct RectVertexSIMD<float> {
-    union {
-        struct {v128_t vx, vy;} vector;
-        struct {std::array<float, 4> x, y;} scalar;
-    } data;
-    inline RectVertexSIMD() {}
-    inline RectVertexSIMD(std::array<float, 4> x, std::array<float, 4> y) {
-        data.scalar.x = x;
-        data.scalar.y = y;
-    }
-    inline RectVertexSIMD(v128_t x, v128_t y) {
-        data.vector.vx = x;
-        data.vector.vy = y;
-    }
-    inline RectVertexSIMD(Vec4<float> x, Vec4<float> y) {
-        data.vector.vx = x.data.vector;
-        data.vector.vy = y.data.vector;
-    }
-};
-template <>
-struct RectVertexSIMD<double> {
-    union {
-        struct {v256_t vx, vy;} vector;
-        struct {std::array<double, 4> x, y;} scalar;
-    } data;
-    inline RectVertexSIMD() {}
-    inline RectVertexSIMD(std::array<double, 4> x, std::array<double, 4> y) {
-        data.scalar.x = x;
-        data.scalar.y = y;
-    }
-    inline RectVertexSIMD(v256_t x, v256_t y) {
-        data.vector.vx = x;
-        data.vector.vy = y;
-    }
-    inline RectVertexSIMD(Vec4<double> x, Vec4<double> y) {
-        data.vector.vx = x.data.vector;
-        data.vector.vy = y.data.vector;
-    }
-};
-// 包圍盒
-FLOAT_TEMPLATE struct Bounding {
-    Vec2<FLOAT> min, max;
-    inline Bounding() {}
-    inline Bounding(Vec2<FLOAT> _min, Vec2<FLOAT> _max): min(_min), max(_max) {}
-};
-FLOAT_TEMPLATE using RectVertex = std::array<Vec2<FLOAT>, 4>; // 矩形頂點
-
+static inline void _sincos(float x, float *s, float *c) {sincosf(x, s, c);}
+static inline void _sincos(double x, double *s, double *c) {sincos(x, s, c);}
 
 FLOAT_TEMPLATE static inline bool check_collision_obb2d(
     double x1, double y1, FLOAT w1, FLOAT h1, FLOAT r1,
