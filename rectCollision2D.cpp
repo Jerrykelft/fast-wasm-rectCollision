@@ -5,39 +5,35 @@
 #define USE_DEFAULT_VEC4
 #include "simd.c"
 
+#define inline __attribute__((__always_inline__)) inline
+
 extern "C" {
     void sincosf(float x, float *s, float *c);
     void sincos(double x, double *s, double *c);
 }
+static inline void sincos(float x, float *s, float *c) {sincosf(x, s, c);}
 
-#define FLOAT_TEMPLATE \
-template <typename FLOAT> \
+
+template <typename FLOAT>
 requires std::floating_point<FLOAT>
-
-// 向量
-FLOAT_TEMPLATE struct Vec2 {
+struct Vec2 {
     FLOAT x, y;
-    inline Vec2() {}
-    inline Vec2(FLOAT _x, FLOAT _y): x(_x), y(_y) {}
-    inline FLOAT dot(Vec2 other) const {return x * other.x + y * other.y;}
+    inline Vec4<FLOAT> dot(std::array<Vec4<FLOAT>, 2> other) const {return Vec4<FLOAT>(x) * other[0] + Vec4<FLOAT>(y) * other[1];}
 };
-static inline void _sincos(float x, float *s, float *c) {sincosf(x, s, c);}
-static inline void _sincos(double x, double *s, double *c) {sincos(x, s, c);}
 
-#define s1 static_cast<FLOAT>(0.0)
-#define c1 static_cast<FLOAT>(1.0)
-
-FLOAT_TEMPLATE static inline bool _rectCollision(
+template <typename FLOAT>
+requires std::floating_point<FLOAT>
+static inline bool _rectCollision(
     double x1, double y1, FLOAT w1, FLOAT h1, FLOAT r1,
     double x2, double y2, FLOAT w2, FLOAT h2, FLOAT r2
 ) {
     FLOAT dx = x2 - x1, dy = y2 - y1;
     if (abs(r1) > static_cast<FLOAT>(1e-5)) {
         FLOAT s, c;
-        _sincos(-r1, &s, &c);
-        // 旋轉並平移回原位
-        dx = dx * c - dy * s;
-        dy = dx * s + dy * c;
+        sincos(-r1, &s, &c);
+        FLOAT _dx = dx, _dy = dy;
+        dx = _dx * c - _dy * s;
+        dy = _dx * s + _dy * c;
     }
 
     FLOAT hw1 = w1 * static_cast<FLOAT>(0.5),
@@ -46,48 +42,21 @@ FLOAT_TEMPLATE static inline bool _rectCollision(
           hh2 = h2 * static_cast<FLOAT>(0.5);
 
     FLOAT s2, c2;
-    _sincos(r2 - r1, &s2, &c2);
+    sincos(r2 - r1, &s2, &c2);
 
-    Vec4<FLOAT> vaxis[2] = {{c1, s1, c2, -s2}, {s1, c1, s2, c2}};
+    Vec2<FLOAT> axis[2] = {{c2, s2}, {-s2, c2}};
+    std::array<Vec4<FLOAT>, 2> vaxis = {
+        (Vec4<FLOAT>){static_cast<FLOAT>(1.0), static_cast<FLOAT>(0.0), c2, -s2},
+        (Vec4<FLOAT>){static_cast<FLOAT>(0.0), static_cast<FLOAT>(1.0), s2, c2}
+    };
 
-    Vec4<FLOAT> limit = (vaxis[0] * Vec4<FLOAT>(hw1 + hw2 * c2 - hh2 * s2)).abs() +
-                        (vaxis[1] * Vec4<FLOAT>(hh1 + hw2 * s2 + hh2 * c2)).abs();
+    Vec4<FLOAT> limit = (Vec4<FLOAT>(hw1) * vaxis[0]).abs() +
+                        (Vec4<FLOAT>(hh1) * vaxis[1]).abs() +
+                        (Vec4<FLOAT>(hw2) * axis[0].dot(vaxis)).abs() +
+                        (Vec4<FLOAT>(hh2) * axis[1].dot(vaxis)).abs();
 
     Vec4<FLOAT> project = (Vec4<FLOAT>(dx) * vaxis[0] + Vec4<FLOAT>(dy) * vaxis[1]).abs();
     return !(project > limit).any_true();
-}
-
-
-FLOAT_TEMPLATE static inline bool __rectCollision(
-    double x1, double y1, FLOAT w1, FLOAT h1, FLOAT r1,
-    double x2, double y2, FLOAT w2, FLOAT h2, FLOAT r2
-) {
-    FLOAT dx = x2 - x1, dy = y2 - y1;
-    if (abs(r1) > static_cast<FLOAT>(1e-5)) {
-        FLOAT s, c;
-        _sincos(-r1, &s, &c);
-        // 旋轉並平移回原位
-        dx = dx * c - dy * s;
-        dy = dx * s + dy * c;
-    }
-
-    FLOAT s2, c2;
-    _sincos(r2 - r1, &s2, &c2);
-
-    Vec2<FLOAT> axis[4] = {{c1, s1}, {s1, c1}, {c2, s2}, {-s2, c2}};
-    Vec2<FLOAT> D(dx, dy);
-    FLOAT hw1 = w1 * static_cast<FLOAT>(0.5),
-          hh1 = h1 * static_cast<FLOAT>(0.5),
-          hw2 = w2 * static_cast<FLOAT>(0.5),
-          hh2 = h2 * static_cast<FLOAT>(0.5);
-    for (int i = 0; i < 4; ++i) {
-        FLOAT r = abs(w1 * axis[i].dot(axis[0])) +
-                  abs(h1 * axis[i].dot(axis[1])) +
-                  abs(w2 * axis[i].dot(axis[2])) +
-                  abs(h2 * axis[i].dot(axis[3]));
-        if (abs(D.dot(axis[i])) > r) return false;
-    }
-    return true;
 }
 
 extern "C" {
