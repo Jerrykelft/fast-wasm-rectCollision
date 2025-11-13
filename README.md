@@ -1,5 +1,7 @@
 # Fast Rectangle Collision Detection (WebAssembly)
 
+###### Due to the highly simplified new algorithm, the speed benefit of SIMD is now minimal (honestly, almost negligible). We'll stick with it for the time being \:).
+
 A high-performance WebAssembly module for rectangle collision detection, optimized with SIMD instructions.
 
 ## Features
@@ -7,17 +9,14 @@ A high-performance WebAssembly module for rectangle collision detection, optimiz
 - Fast AABB (Axis-Aligned Bounding Box) and OBB (Oriented Bounding Box) collision detection (OBB and OBB will be automatically converted to AABB and OBB)
 - SIMD-optimized calculations using WebAssembly SIMD128
 - Support for both f32 (single precision) and f64 (double precision) floating-point calculations
-- Fast math optimization options
 - Efficient memory usage and computation
 
 ## Exported Functions
 
 The module exports four variants of the collision detection function:
 
-- `rectCollisionF32`: 32-bit floating-point collision detection
-- `rectCollisionF32fast`: 32-bit floating-point with fast-math optimizations
-- `rectCollisionF64`: 64-bit floating-point collision detection
-- `rectCollisionF64fast`: 64-bit floating-point with fast-math optimizations
+- `rectCollisionf`: 32-bit floating-point collision detection
+- `rectCollision`: 64-bit floating-point collision detection
 
 ### Function Parameters
 
@@ -36,9 +35,7 @@ Returns `1` if the rectangles are colliding, `0` otherwise.
 ## Implementation Details
 
 - Uses SAT (Separating Axis Theorem) for OBB collision detection
-- Optimizes common cases (0°, 90°, 180°, 270° rotations) with AABB checks
 - Implements efficient SIMD operations for vector calculations
-- Uses bounding box pre-check to quickly reject non-colliding cases
 
 ## Building
 
@@ -50,20 +47,19 @@ powershell -File "./compile.ps1"
 ```
 
 The script will:
-1. Compile separate object files for each variant (f32/f64, with/without fast-math)
+1. Compile separate object files for each variant (f32/f64)
 2. Link them into a single WebAssembly module
-3. Generate both `.wasm` files
-4. Clean up temporary object files
+3. Clean up temporary object files
 
 ## Usage Example
 
 ```javascript
 // Load the WebAssembly module
 const wasmModule = await WebAssembly.instantiateStreaming(fetch('rectCollision.wasm'));
-const { rectCollisionF32 } = wasmModule.instance.exports;
+const { rectCollisionf } = wasmModule.instance.exports;
 
 // Check collision between two rectangles
-const isColliding = rectCollisionF32(
+const isColliding = rectCollisionf(
     0, 0, 100, 50, Math.PI/4,  // First rectangle: centered at (0,0), 100x50, rotated 45°
     50, 50, 80, 60, 0          // Second rectangle: centered at (50,50), 80x60, no rotation
 );
@@ -72,9 +68,7 @@ const isColliding = rectCollisionF32(
 ## Performance Considerations
 
 - F32 variants are generally faster but less precise
-- Fast math variants may improve performance at the cost of strict IEEE compliance
 - SIMD operations provide significant speedup for vector calculations
-- The implementation automatically selects the most efficient algorithm based on rotation angles
 
 ## License
 
